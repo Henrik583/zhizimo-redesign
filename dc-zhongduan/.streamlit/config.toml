@@ -1,0 +1,9 @@
+[server]
+fileWatcherType = "none"
+runOnSave = false
+headless = true
+showEmailPrompt = false
+maxUploadSize = 500
+
+[browser]
+gatherUsageStats = false

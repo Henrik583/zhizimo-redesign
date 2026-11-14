@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.venv/
+.streamlit/secrets.toml
+*.log
+输出/
+数据记忆库/
+神经网络库/

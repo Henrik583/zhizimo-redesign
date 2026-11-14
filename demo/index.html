@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="PEMFC 剩余寿命预测终端的公开 FC1 交互演示。">
+  <title>PEMFC 剩余寿命预测终端 · FC1 演示</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span><strong>PEMFC</strong><small>剩余寿命预测终端</small></span>
+    </div>
+
+    <section class="dataset" aria-labelledby="dataset-title">
+      <h2 id="dataset-title">演示数据</h2>
+      <div class="dataset-name">
+        <span class="dataset-dot" aria-hidden="true"></span>
+        <span>FC1 <small>公开电堆老化记录</small></span>
+      </div>
+      <dl>
+        <div><dt>输入记录</dt><dd id="record-count">—</dd></div>
+        <div><dt>有效时长</dt><dd id="record-duration">—</dd></div>
+        <div><dt>模拟路径</dt><dd id="path-count">—</dd></div>
+      </dl>
+    </section>
+
+    <nav class="navigation" aria-label="演示导航">
+      <a href="#results">预测结果</a>
+      <a href="#data-notes">数据与方法</a>
+    </nav>
+
+    <button id="export" class="button" type="button" disabled>导出阈值表 CSV</button>
+    <p id="export-status" class="sr-only" role="status"></p>
+  </aside>
+
+  <main id="main" class="workspace">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">公开 FC1 交互演示</p>
+        <h1>质子交换膜燃料电池<br>剩余寿命预测</h1>
+        <p class="intro">查看电堆电压外推曲线，调整失效阈值，比较模拟路径的越阈时间。</p>
+      </div>
+      <details class="team">
+        <summary>制作组简介</summary>
+        <p>毛炯、黄胤淦、蒋帅、朱其言</p>
+      </details>
+    </header>
+
+    <section id="results" aria-labelledby="results-title">
+      <div class="section-heading">
+        <h2 id="results-title">预测结果</h2>
+        <p id="active-threshold">正在读取失效阈值</p>
+      </div>
+      <dl class="metrics">
+        <div class="metric metric-main"><dt>中位越阈时间 P50</dt><dd id="p50">—</dd></div>
+        <div class="metric"><dt>较早越阈 P5</dt><dd id="p5">—</dd></div>
+        <div class="metric"><dt>较晚越阈 P95</dt><dd id="p95">—</dd></div>
+        <div class="metric metric-context"><dt>越阈路径</dt><dd id="crossed">—</dd><span id="censor-rate"></span></div>
+      </dl>
+      <p id="load-error" class="load-error" hidden>暂时无法读取演示结果。请刷新页面重试。</p>
+      <iframe id="charts" src="chart.html" title="FC1 电压曲线、失效阈值滑条与越阈时间分布" height="884"></iframe>
+    </section>
+
+    <section id="data-notes" class="data-notes" aria-labelledby="notes-title">
+      <h2 id="notes-title">数据与方法</h2>
+      <p>页面使用终端内置的公开 FC1 样例与预先计算的结果。此演示使用固定数据，支持切换阈值和导出阈值表。</p>
+      <p>P5、P50、P95 按在推演时限内越过阈值的模拟路径计算。曲线和越阈时间均属于模型外推。</p>
+      <a href="https://repository.lboro.ac.uk/articles/dataset/IEEE_2014_Data_Challenge_Data/3518141" target="_blank" rel="noopener noreferrer">IEEE PHM 2014 数据来源</a>
+    </section>
+  </main>
+</body>
+</html>

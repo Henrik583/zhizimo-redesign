@@ -1,0 +1,339 @@
+/* Visual redesign guided by Unslop by Damir Sokolovsky (@heydamir), CC BY 4.0. */
+.stApp:has(.pemfc-interface) {
+  --work-bg: #f5f7f7;
+  --work-paper: #ffffff;
+  --work-field: #edf1f1;
+  --work-ink: #172827;
+  --work-subtle: #475d5b;
+  --work-muted: #536966;
+  --work-rule: #d4dfde;
+  --work-accent: #006f65;
+  --work-hover: #00564f;
+  --work-on-accent: #ffffff;
+  --work-threshold: #a14438;
+  --work-font: "Geist", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --work-numbers: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+  color: var(--work-ink);
+  background: var(--work-bg);
+  font-family: var(--work-font);
+  font-variant-numeric: tabular-nums;
+}
+
+.stApp:has(.pemfc-interface--dark) {
+  --work-bg: #151b1b;
+  --work-paper: #1c2424;
+  --work-field: #232e2e;
+  --work-ink: #edf4f3;
+  --work-subtle: #c2d0ce;
+  --work-muted: #a2b5b2;
+  --work-rule: #3b4a49;
+  --work-accent: #79c9bb;
+  --work-hover: #9cdbd0;
+  --work-on-accent: #112623;
+  --work-threshold: #f19b8e;
+}
+
+.pemfc-interface { display: none; }
+.stApp:has(.pemfc-interface) [data-testid="stHeader"] { background: var(--work-bg); }
+.stApp:has(.pemfc-interface) [data-testid="stAppDeployButton"] { display: none; }
+.stApp:has(.pemfc-interface) [data-testid="stMainBlockContainer"] {
+  max-width: 88rem;
+  padding: 3.5rem 2.5rem 3rem;
+}
+
+.stApp:has(.pemfc-interface) [data-testid="stSidebar"] {
+  background: var(--work-paper);
+  border-inline-end: 1px solid var(--work-rule);
+}
+
+.stApp:has(.pemfc-interface) [data-testid="stSidebarUserContent"] {
+  padding: 0.75rem 0 1.5rem;
+}
+
+.stApp:has(.pemfc-interface) [data-testid="stSidebarUserContent"] > div > [data-testid="stVerticalBlock"] {
+  gap: 0.75rem;
+}
+
+.stApp:has(.pemfc-interface) [data-testid="stSidebarCollapseButton"],
+.stApp:has(.pemfc-interface) [data-testid="stSidebarCollapsedControl"] { opacity: 1; }
+.stApp:has(.pemfc-interface) :is(h1, h2, h3, p, label) { font-family: var(--work-font); }
+.stApp:has(.pemfc-interface) :is(h1, h2, h3) { color: var(--work-ink); font-weight: 600; }
+.stApp:has(.pemfc-interface) :is([data-testid="stCaptionContainer"], small) { color: var(--work-muted); }
+.stApp:has(.pemfc-interface) [data-testid="stCaptionContainer"] p {
+  color: var(--work-muted);
+  line-height: 1.55;
+  opacity: 1;
+}
+.stApp:has(.pemfc-interface) hr { border-color: var(--work-rule); margin-block: 0.25rem; }
+
+.stApp:has(.pemfc-interface) :is(
+  [data-testid="stBaseButton-secondary"],
+  [data-testid="stBaseButton-primary"],
+  [data-testid="stPopoverButton"],
+  [data-testid="stFileUploaderDropzone"] button
+) {
+  min-height: 2.5rem;
+  border: 1px solid var(--work-rule);
+  border-radius: 8px;
+  background: var(--work-paper);
+  color: var(--work-ink);
+  font-weight: 500;
+  box-shadow: none;
+  transition: color 160ms ease-out, background-color 160ms ease-out, border-color 160ms ease-out;
+}
+
+.stApp:has(.pemfc-interface) :is(
+  [data-testid="stBaseButton-secondary"],
+  [data-testid="stPopoverButton"],
+  [data-testid="stFileUploaderDropzone"] button
+):hover {
+  border-color: var(--work-accent);
+  color: var(--work-accent);
+}
+
+.stApp:has(.pemfc-interface) [data-testid="stBaseButton-primary"] {
+  min-height: 2.75rem;
+}
+
+.stApp:has(.pemfc-interface) [data-testid="stBaseButton-primary"]:enabled {
+  border-color: var(--work-accent);
+  background-color: var(--work-accent) !important;
+  color: var(--work-on-accent);
+}
+
+.stApp:has(.pemfc-interface) [data-testid="stBaseButton-primary"]:enabled:hover {
+  background-color: var(--work-hover) !important;
+  border-color: var(--work-hover);
+}
+
+.stApp:has(.pemfc-interface) [data-testid="stBaseButton-primary"]:disabled {
+  color: var(--work-muted);
+  border-color: var(--work-rule);
+  background: var(--work-field);
+}
+
+.stApp:has(.pemfc-interface) [data-testid="stBaseButton-primary"]:not(:disabled) p {
+  color: var(--work-on-accent);
+}
+.stApp:has(.pemfc-interface) [data-baseweb="radio"]:has(input:checked) > div:first-child {
+  background-color: var(--work-accent);
+}
+
+.stApp:has(.pemfc-interface) [data-testid="stCheckbox"] label:has(input:checked) > div:first-child {
+  background-color: var(--work-accent);
+}
+
+.stApp:has(.pemfc-interface) [data-baseweb="select"] > div {
+  border: 1px solid var(--work-rule);
+  border-radius: 8px;
+  background: var(--work-field);
+}
+
+.stApp:has(.pemfc-interface) :is(button, summary, a, input, [role="combobox"]):focus-visible {
+  outline: 2px solid var(--work-accent);
+  outline-offset: 2px;
+}
+
+.stApp:has(.pemfc-interface) [data-testid="stFileUploaderDropzone"] {
+  padding: 0.75rem;
+  border: 1px dashed var(--work-rule);
+  border-radius: 12px;
+  background: var(--work-bg);
+}
+
+.stApp:has(.pemfc-interface) [data-testid="stFileUploaderDropzoneInstructions"] span {
+  color: var(--work-subtle);
+}
+
+.stApp:has(.pemfc-interface) [data-testid="stExpander"] details {
+  border-color: var(--work-rule);
+  border-radius: 8px;
+}
+
+.stApp:has(.pemfc-interface) [data-testid="stExpander"] summary { min-height: 2.25rem; }
+.stApp:has(.pemfc-interface) [data-testid="stExpander"] summary:hover { color: var(--work-accent); }
+
+.stApp:has(.pemfc-interface) [data-testid="stMetric"] {
+  min-width: 0;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--work-rule);
+  border-radius: 12px;
+  background: var(--work-paper);
+}
+
+.stApp:has(.pemfc-interface) [data-testid="stMetricLabel"] p {
+  color: var(--work-subtle);
+  white-space: normal;
+}
+
+.stApp:has(.pemfc-interface) [data-testid="stMetricValue"] {
+  color: var(--work-ink);
+  font: 500 clamp(1.5rem, 3vw, 2rem)/1.35 var(--work-numbers);
+}
+
+.pemfc-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-block: 0.25rem 0.75rem;
+}
+
+.pemfc-mark {
+  position: relative;
+  flex: 0 0 2rem;
+  height: 2rem;
+  border: 1px solid var(--work-rule);
+  border-radius: 8px;
+  background: var(--work-field);
+}
+
+.pemfc-mark::before {
+  position: absolute;
+  inset: 0.5rem 0.5rem;
+  border-block: 1px solid var(--work-accent);
+  content: "";
+}
+
+.pemfc-mark::after {
+  position: absolute;
+  top: calc(50% - 0.5px);
+  inset-inline: 0.5rem;
+  border-top: 1px solid var(--work-accent);
+  content: "";
+}
+
+.pemfc-brand strong, .pemfc-brand span { display: block; }
+.pemfc-brand strong { color: var(--work-ink); font: 600 0.875rem/1.3 var(--work-numbers); }
+.pemfc-brand span { color: var(--work-muted); font-size: 0.75rem; }
+.pemfc-side-heading {
+  color: var(--work-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.st-key-pemfc_header {
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--work-rule);
+}
+
+.pemfc-title { padding-top: 0.25rem; }
+.pemfc-title h1 {
+  max-width: 40rem;
+  padding: 0;
+  margin: 0;
+  font-size: clamp(1.625rem, 3.2vw, 2.5rem);
+  font-weight: 500;
+  line-height: 1.24;
+  text-wrap: balance;
+}
+
+.pemfc-title p {
+  max-width: 38rem;
+  margin: 0.75rem 0 0;
+  color: var(--work-subtle);
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}
+
+.st-key-pemfc_toolbar {
+  padding-block: 0.25rem;
+}
+
+.pemfc-empty {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 0.6fr);
+  gap: 2rem;
+  align-items: center;
+  min-height: 16rem;
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  border: 1px solid var(--work-rule);
+  border-radius: 16px;
+  background: var(--work-paper);
+}
+
+.pemfc-empty h2 { margin: 0; padding: 0; font-size: clamp(1.25rem, 2.4vw, 1.625rem); font-weight: 500; }
+.pemfc-empty p { margin: 0.75rem 0 0; color: var(--work-subtle); line-height: 1.7; }
+.pemfc-empty .pemfc-formats { color: var(--work-muted); font: 0.8125rem/1.5 var(--work-numbers); }
+.pemfc-inputs {
+  margin: 0;
+  padding-inline-start: 1.25rem;
+  border-inline-start: 1px solid var(--work-rule);
+}
+
+.pemfc-inputs div { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.5rem 0; }
+.pemfc-inputs div + div { border-top: 1px solid var(--work-rule); }
+.pemfc-inputs dt { color: var(--work-subtle); font-size: 0.875rem; }
+.pemfc-inputs dd { margin: 0; color: var(--work-ink); font: 500 0.875rem/1.5 var(--work-numbers); }
+.pemfc-empty--ready { min-height: 10rem; grid-template-columns: 1fr; }
+
+.st-key-dsh_other_panel {
+  position: fixed;
+  top: 5.25rem;
+  right: 1.25rem;
+  width: min(28rem, calc(100vw - 2.5rem));
+  max-height: 78vh;
+  overflow: auto;
+  z-index: 999900;
+  padding: 1rem;
+  border: 1px solid var(--work-rule);
+  border-radius: 12px;
+  background: var(--work-paper);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+#dsh-dim {
+  position: fixed;
+  inset: 0;
+  z-index: 999990;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: rgba(16, 29, 29, 0.5);
+  contain: strict;
+}
+
+#dsh-dim.dsh-hand {
+  pointer-events: auto;
+  animation: pemfc-overlay-timeout 0.8s linear 240s forwards;
+}
+
+#dsh-dim .dsh-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: min(28rem, calc(100vw - 2rem));
+  padding: 1.25rem;
+  border: 1px solid var(--work-rule);
+  border-radius: 12px;
+  background: var(--work-paper);
+  color: var(--work-ink);
+}
+
+#dsh-dim .dsh-box strong { font-weight: 600; }
+#dsh-dim .dsh-sub { color: var(--work-muted); font-size: 0.875rem; line-height: 1.55; }
+#dsh-dim .dsh-sub:empty { display: none; }
+#dsh-dim .dsh-ring {
+  flex: 0 0 1rem;
+  height: 1rem;
+  margin-top: 0.25rem;
+  border: 2px solid var(--work-rule);
+  border-top-color: var(--work-accent);
+  border-radius: 50%;
+  animation: pemfc-spin 0.9s linear infinite;
+}
+
+@keyframes pemfc-spin { to { transform: rotate(360deg); } }
+@keyframes pemfc-overlay-timeout { to { opacity: 0; visibility: hidden; } }
+
+@media (max-width: 760px) {
+  .stApp:has(.pemfc-interface) [data-testid="stMainBlockContainer"] { padding: 3.5rem 1rem 2rem; }
+  .st-key-pemfc_header [data-testid="stHorizontalBlock"] { gap: 1.25rem; }
+  .pemfc-empty { grid-template-columns: 1fr; gap: 1.25rem; min-height: auto; }
+  .pemfc-inputs { padding: 0; border-inline-start: 0; border-top: 1px solid var(--work-rule); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stApp:has(.pemfc-interface) button { transition: none; }
+  #dsh-dim .dsh-ring { animation: none; }
+}
