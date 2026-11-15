@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import base64
 import io
 import json
+import zipfile
 from datetime import datetime
 from html import escape
 from pathlib import Path
@@ -22,12 +24,17 @@ import nn_library as nl
 import resource_guard as rg
 import rul_pipeline as rp
 
-try:
-    import shell_patch as _shell_patch
+PUBLIC_MODE = globals().get("PUBLIC_MODE", False)
+PUBLIC_UPLOAD_BYTES = 32 * 1024 * 1024
+PUBLIC_MAX_DURATION_H = 10_000.0
 
-    _shell_patch.ensure()
-except Exception:
-    pass
+if not PUBLIC_MODE:
+    try:
+        import shell_patch as _shell_patch
+
+        _shell_patch.ensure()
+    except Exception:
+        pass
 
 plt.rcParams["font.sans-serif"] = [
     "Microsoft YaHei", "SimHei",
@@ -39,10 +46,13 @@ plt.rcParams["axes.unicode_minus"] = False
 
 HERE = Path(__file__).resolve().parent
 OUTPUT_ROOT = HERE / "输出"
-OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+if not PUBLIC_MODE:
+    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 DIAG_LOG = HERE / "终端诊断.log"
 
 def log_exc(tag: str, ex: BaseException) -> str:
+    if PUBLIC_MODE:
+        return ""
     import traceback
     from datetime import datetime as _dt
     tb = "".join(traceback.format_exception(type(ex), ex, ex.__traceback__))
@@ -127,9 +137,11 @@ def _png(fig: plt.Figure, dpi: int = 110) -> bytes:
     plt.close(fig)
     return buf.getvalue()
 
-@st.cache_data(show_spinner=False, max_entries=8)
 def _parse_blob(blob: bytes):
     return rp.read_any(blob)
+
+if not PUBLIC_MODE:
+    _parse_blob = st.cache_data(show_spinner=False, max_entries=8)(_parse_blob)
 
 def _friendly_err(ex: BaseException) -> str:
     raw = str(ex).strip()
@@ -153,14 +165,15 @@ def _friendly_err(ex: BaseException) -> str:
     return raw or "未知错误。"
 
 def _reset_session() -> None:
-    try:
-        mw.reset()
-    except Exception:
-        pass
-    try:
-        st.cache_data.clear()
-    except Exception:
-        pass
+    if not PUBLIC_MODE:
+        try:
+            mw.reset()
+        except Exception:
+            pass
+        try:
+            st.cache_data.clear()
+        except Exception:
+            pass
     for _k in list(st.session_state.keys()):
         try:
             del st.session_state[_k]
@@ -171,9 +184,11 @@ def _reset_session() -> None:
 def _load_demo(blob: bytes, time_unit: str = "auto"):
     return rp.load_csv(blob, time_unit=time_unit)
 
-@st.cache_data(show_spinner=False, max_entries=6)
 def _load_many(blobs: tuple, time_unit: str = "auto"):
     return rp.load_csv_many(list(blobs), time_unit=time_unit)
+
+if not PUBLIC_MODE:
+    _load_many = st.cache_data(show_spinner=False, max_entries=6)(_load_many)
 
 def _fig_prediction(prep, g, mc, ft: float, uth: float) -> plt.Figure:
     t0 = prep["t_end"]
@@ -297,25 +312,21 @@ def run_analysis(df: pd.DataFrame, name: str, use_history: bool, hist_ids: list[
 
     _bad_cal = abs(float(cal["d_p95"])) > 20.0 or abs(float(cal["d_p5"])) > 20.0
     if _bad_cal:
-        quality = quality + ["标定乘子分布异常（d_p5=%.1f, d_p95=%.1f）：本档未写入历史记忆库，避免污染概率池"
-                             % (float(cal["d_p5"]), float(cal["d_p95"]))]
-        ds_id = None
-    else:
-        ds_id = dm.save_dataset(name, prep, g, cal, extra=dict(quality="; ".join(quality)))
+        note = "标定乘子分布异常（d_p5=%.1f, d_p95=%.1f）" % (float(cal["d_p5"]), float(cal["d_p95"]))
+        quality = quality + [note if PUBLIC_MODE else note + "：本档未写入历史记忆库，避免污染概率池"]
 
-    nn = nl.archive(name, prep, extra=dict(quality="; ".join(quality), source="终端预测"))
+    ds_id = nn = None
+    if not PUBLIC_MODE:
+        if not _bad_cal:
+            ds_id = dm.save_dataset(name, prep, g, cal, extra=dict(quality="; ".join(quality)))
+        nn = nl.archive(name, prep, extra=dict(quality="; ".join(quality), source="终端预测"))
     return dict(ok=True, name=name, prep=prep, g=g, cal=cal, cal_use=cal_use,
                 mc=mc, ai=ai, quality=quality, ds_id=ds_id, nn=nn, cond=cond,
                 n_history=n_sets, use_history=use_history, fp=fp)
 
-def _save_outputs(png1: bytes, png2: bytes, res, ft, uth, rr) -> Path:
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    d = OUTPUT_ROOT / f"预测_{stamp}"
-    d.mkdir(parents=True, exist_ok=True)
-    (d / "图1_预测曲线.png").write_bytes(png1)
-    (d / "图2_RUL分布.png").write_bytes(png2)
+def _result_csv(ft, uth, rr) -> bytes:
     valid = rr[np.isfinite(rr)]
-    pd.DataFrame({
+    return pd.DataFrame({
         "FT(%)": [ft],
         "U_th(V)": [uth],
         "n_valid": [len(valid)],
@@ -324,10 +335,48 @@ def _save_outputs(png1: bytes, png2: bytes, res, ft, uth, rr) -> Path:
         "P50_h": [np.percentile(valid, 50) if len(valid) else np.nan],
         "P75_h": [np.percentile(valid, 75) if len(valid) else np.nan],
         "P95_h": [np.percentile(valid, 95) if len(valid) else np.nan],
-    }).to_csv(d / "RUL分位数.csv", index=False, encoding="utf-8-sig")
+    }).to_csv(index=False).encode("utf-8-sig")
+
+def _result_files(png1: bytes, png2: bytes, ft, uth, rr) -> dict[str, bytes]:
+    return {"图1_预测曲线.png": png1, "图2_RUL分布.png": png2, "RUL分位数.csv": _result_csv(ft, uth, rr)}
+
+def _save_outputs(png1: bytes, png2: bytes, res, ft, uth, rr) -> Path:
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    d = OUTPUT_ROOT / f"预测_{stamp}"
+    d.mkdir(parents=True, exist_ok=True)
+    for name, payload in _result_files(png1, png2, ft, uth, rr).items():
+        (d / name).write_bytes(payload)
     return d
 
+def _download_outputs(prep, g, mc, ft, uth, rr) -> None:
+    png1 = _png(_fig_prediction(prep, g, mc, ft, uth))
+    png2 = _png(_fig_hist(rr, ft, uth))
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in _result_files(png1, png2, ft, uth, rr).items():
+            archive.writestr(name, payload)
+    payload = base64.b64encode(buf.getvalue()).decode("ascii")
+    components.html(
+        '<meta charset="utf-8"><style>body{margin:0;padding:4px;font:15px system-ui,sans-serif}'
+        'a{color:#00564f;background:#edf1f1;display:inline-flex;align-items:center;min-height:40px;'
+        'padding:0 12px;border-radius:8px}</style>'
+        f'<a href="data:application/zip;base64,{payload}" download="PEMFC-结果.zip">'
+        '下载图表与阈值 CSV</a>',
+        height=56,
+    )
+
+def _public_duration_error(df: pd.DataFrame) -> str | None:
+    time = df["Time (h)"]
+    start, end = float(time.iloc[0]), float(time.iloc[-1])
+    duration = end - start
+    if not np.isfinite(duration) or duration > PUBLIC_MAX_DURATION_H:
+        return (f"在线版支持有效时长不超过 {PUBLIC_MAX_DURATION_H:,.0f} h 的曲线。"
+                "请检查时间列单位和异常时间戳，较长记录可在本地版分析。")
+    return None
+
 def _autosave_previous(key: str) -> None:
+    if PUBLIC_MODE:
+        return
     try:
         r = st.session_state.get(key)
         if not isinstance(r, dict) or not r.get("ok") or r.get("saved"):
@@ -396,7 +445,8 @@ with st.sidebar:
             type=["csv", "tsv", "txt", "xlsx", "xls"], accept_multiple_files=True,
             help="默认「覆盖」模式：每次只分析一份完整曲线，新上传的文件会自动顶替上一份；"
                  "同一块电池的分段文件请切到「拼接」模式。")
-        blobs_all = [u.getvalue() for u in ups] if ups else []
+        _over_limit = PUBLIC_MODE and sum(upload.size for upload in ups) > PUBLIC_UPLOAD_BYTES
+        blobs_all = [] if _over_limit else [u.getvalue() for u in ups]
         _mode_label = st.radio(
             "多文件处理",
             ["覆盖：每次只分析一份完整曲线（推荐）", "拼接：同一电池的分段文件接成一条"],
@@ -406,7 +456,9 @@ with st.sidebar:
                  "拼接（高级）：仅当这些文件确实来自同一块电池、且时间段首尾相接时才用；"
                  "不同电池拼在一起会让衰减律、RUL 与指标全部失真（这正是以前崩溃的来源）。")
         _merge_mode = str(_mode_label).startswith("拼接")
-        if _merge_mode and len(blobs_all) > 1:
+        if _over_limit:
+            parse_err = "一次上传的文件总大小不能超过 32 MB。请移除多余文件或缩小数据后重试。"
+        elif _merge_mode and len(blobs_all) > 1:
             blobs = blobs_all
             blob = blobs[0]
             data_name = Path(ups[0].name).stem + f" 等{len(blobs)}个文件"
@@ -494,6 +546,10 @@ with st.sidebar:
         else:
             parse_err = None
 
+    if PUBLIC_MODE and df_input is not None:
+        parse_err = _public_duration_error(df_input)
+        if parse_err:
+            df_input = None
     _raw_unit = (df_input.attrs.get("time_unit") if df_input is not None else None) or "h"
     if df_input is not None:
         st.caption(f"时间列解读：{rp._TIME_UNIT_NAME.get(_raw_unit, _raw_unit)}"
@@ -517,8 +573,11 @@ with st.sidebar:
             _autosave_previous(_k)
             st.session_state.pop(_k, None)
         rg.note_op("数据解析")
-        rg.log_event("数据就绪", note=_data_sig)
-        rg.release_hold(_overlay_slot, "数据已解析，正在释放内存")
+        if not PUBLIC_MODE:
+            rg.log_event("数据就绪", note=_data_sig)
+            rg.release_hold(_overlay_slot, "数据已解析，正在释放内存")
+        else:
+            _clear_loading(_overlay_slot)
 
     st.divider()
     with st.expander("指标与保存阈值", expanded=False):
@@ -530,49 +589,51 @@ with st.sidebar:
             st.form_submit_button("应用阈值")
         st.caption("应用后更新指标与保存口径。图内滑条用于预览。")
     map_sig = st.session_state.get("map_sig", "") if src == "上传数据" else ""
-    use_history = st.toggle("历史数据增强", value=True,
-                            help="将历史数据的分布合入概率计算。")
+    chosen = []
+    use_history = False
+    if not PUBLIC_MODE:
+        use_history = st.toggle("历史数据增强", value=True,
+                                help="将历史数据的分布合入概率计算。")
 
-    st.divider()
-    with st.expander("历史数据记忆库", expanded=False):
-        records = dm.list_datasets()
-        st.caption(f"共 {len(records)} 份数据；每次预测自动存档，可单独剔除坏数据")
-        if records:
-            ids = [r["id"] for r in records]
-            labels = [f'{r["created_at"][5:16].replace("T", " ")} · {r["name"][:18]}' for r in records]
-            _prev = [i for i in st.session_state.get("hist_sel", ids) if i in ids]
-            st.session_state["hist_sel"] = _prev
-            chosen = st.multiselect(
-                "参与概率层合并的数据集", ids, default=_prev,
-                format_func=lambda i: labels[ids.index(i)] if i in ids else str(i),
-                key="hist_sel")
-            for r in records[:12]:
-                c1, c2 = st.columns([5, 1])
-                c1.markdown(
-                    f'**{r["name"][:22]}**  \n'
-                    f'`{r["created_at"][5:16].replace("T", " ")}` · {r["t_end"]:.0f} h · '
-                    f'g₀={r["g0_mVh"]:.4f} mV/h · n_win={r["n_win"]}')
-                if c2.button("删除", key=f"del_{r['id']}", help="从历史数据记忆库移除此记录"):
-                    dm.delete_dataset(r["id"])
-                    st.rerun()
-        else:
-            chosen = []
-            st.caption("暂无存档：第一次预测后会自动写入。")
+        st.divider()
+        with st.expander("历史数据记忆库", expanded=False):
+            records = dm.list_datasets()
+            st.caption(f"共 {len(records)} 份数据；每次预测自动存档，可单独剔除坏数据")
+            if records:
+                ids = [r["id"] for r in records]
+                labels = [f'{r["created_at"][5:16].replace("T", " ")} · {r["name"][:18]}' for r in records]
+                _prev = [i for i in st.session_state.get("hist_sel", ids) if i in ids]
+                st.session_state["hist_sel"] = _prev
+                chosen = st.multiselect(
+                    "参与概率层合并的数据集", ids, default=_prev,
+                    format_func=lambda i: labels[ids.index(i)] if i in ids else str(i),
+                    key="hist_sel")
+                for r in records[:12]:
+                    c1, c2 = st.columns([5, 1])
+                    c1.markdown(
+                        f'**{r["name"][:22]}**  \n'
+                        f'`{r["created_at"][5:16].replace("T", " ")}` · {r["t_end"]:.0f} h · '
+                        f'g₀={r["g0_mVh"]:.4f} mV/h · n_win={r["n_win"]}')
+                    if c2.button("删除", key=f"del_{r['id']}", help="从历史数据记忆库移除此记录"):
+                        dm.delete_dataset(r["id"])
+                        st.rerun()
+            else:
+                st.caption("暂无存档：第一次预测后会自动写入。")
 
-    with st.expander("神经网络训练数据", expanded=False):
-        _nn = nl.stats()
-        st.caption(f"共 {_nn['n']} 份 · {_nn['size_text']}；每次预测成功都会把本次**完整序列**"
-                   f"打包入库，供后续训练使用。目录：`{Path(nl.NN_DIR).name}\\`")
-        if _nn["n"]:
-            for _p in nl.list_packs()[:8]:
-                st.markdown(
-                    f'**{str(_p.get("name", ""))[:20]}**  \n'
-                    f'`{str(_p.get("created_at", ""))[5:16].replace("T", " ")}` · '
-                    f'{float(_p.get("t_end", 0)):.0f} h · 指纹 `{_p.get("key", "")}`')
-        else:
-            st.caption("暂无数据：第一次预测成功后会自动入库。")
-        st.caption("去重规则：按「时间网格 + 电压序列」的内容指纹查重，**同一份数据只入一次**"
-                   "（一份数据只看一次，避免反复学习同一份数据、加深模型偏见）。")
+        with st.expander("神经网络训练数据", expanded=False):
+            _nn = nl.stats()
+            st.caption(f"共 {_nn['n']} 份 · {_nn['size_text']}；每次预测成功都会把本次**完整序列**"
+                       f"打包入库，供后续训练使用。目录：`{Path(nl.NN_DIR).name}\\`")
+            if _nn["n"]:
+                for _p in nl.list_packs()[:8]:
+                    st.markdown(
+                        f'**{str(_p.get("name", ""))[:20]}**  \n'
+                        f'`{str(_p.get("created_at", ""))[5:16].replace("T", " ")}` · '
+                        f'{float(_p.get("t_end", 0)):.0f} h · 指纹 `{_p.get("key", "")}`')
+            else:
+                st.caption("暂无数据：第一次预测成功后会自动入库。")
+            st.caption("去重规则：按「时间网格 + 电压序列」的内容指纹查重，**同一份数据只入一次**"
+                       "（一份数据只看一次，避免反复学习同一份数据、加深模型偏见）。")
 
     with st.expander("其余数据", expanded=False):
 
@@ -584,10 +645,11 @@ with st.sidebar:
             width="stretch")
     with st.expander("预测不确定性", expanded=False):
         _slot_band = st.container()
-    with st.expander("历史趋势对比", expanded=False):
-        _slot_trend = st.container()
-    with st.expander("图表与数据文件", expanded=False):
-        _slot_paths = st.container()
+    if not PUBLIC_MODE:
+        with st.expander("历史趋势对比", expanded=False):
+            _slot_trend = st.container()
+        with st.expander("图表与数据文件", expanded=False):
+            _slot_paths = st.container()
     with st.expander("模型版本对比", expanded=False):
         _slot_ver = st.container()
     with st.expander("资源监控", expanded=False):
@@ -606,7 +668,6 @@ with st.sidebar:
 
 hist_ids = chosen
 
-_n_hist = len(dm.list_datasets())
 _minfo = MODEL_INFO if MODEL_INFO.get("ok") else None
 _mname = (_minfo or {}).get("name") or "v4 GRU-Transformer（首次预测时加载）"
 _npar = (_minfo or {}).get("n_params")
@@ -619,7 +680,10 @@ with st.container(key="pemfc_header"):
             '<div class="pemfc-title"><h1>质子交换膜燃料电池<br>剩余寿命预测</h1>'
             '<p>分析电堆电压衰减，查看预测曲线与越过设定阈值的时间分布。</p></div>'
         )
-        st.caption(f"单步自检模型 {_mtxt} · 历史存档 {_n_hist} 份")
+        if PUBLIC_MODE:
+            st.caption(f"单步自检模型 {_mtxt} · 上传和预测结果仅用于当前会话")
+        else:
+            st.caption(f"单步自检模型 {_mtxt} · 历史存档 {len(dm.list_datasets())} 份")
     with _hero_r:
         with st.popover("制作组简介", width="stretch"):
             st.markdown("### 制作组简介")
@@ -651,7 +715,7 @@ with st.container(key="pemfc_toolbar"):
             st.caption(f"单步自检模型已加载{_dstxt}")
         elif MODEL_INFO.get("tried"):
             st.caption("单步自检模型不可用，仍可用物理衰减模型预测。")
-        if key:
+        if key and not PUBLIC_MODE:
             st.caption(f"数据指纹 `{key}` · 历史增强{'开启' if use_history else '关闭'}")
 
 if df_input is not None and df_input.attrs.get("downsampled"):
@@ -686,8 +750,9 @@ if go and df_input is not None:
             _nerr = int(st.session_state.get("__err_n", 0) or 0) + 1
             st.session_state["__err_n"] = _nerr
             st.error(f"分析失败：{_friendly_err(ex)}")
-            with st.expander("查看错误详情（已写入 终端诊断.log）", expanded=False):
-                st.code("见 终端诊断.log")
+            if not PUBLIC_MODE:
+                with st.expander("查看错误详情（已写入 终端诊断.log）", expanded=False):
+                    st.code("见 终端诊断.log")
 
             if _nerr >= 2:
                 st.warning(f"本次会话已连续失败 {_nerr} 次。建议一键刷新回到初始界面再试，"
@@ -697,8 +762,11 @@ if go and df_input is not None:
                 st.rerun()
         finally:
 
-            rg.release_hold(_overlay_slot, "分析完成，正在释放资源",
-                            keep=st.session_state.get(cache_key) is not None)
+            has_result = st.session_state.get(cache_key) is not None
+            if not PUBLIC_MODE:
+                rg.release_hold(_overlay_slot, "分析完成，正在释放资源", keep=has_result)
+            elif not has_result:
+                _clear_loading(_overlay_slot)
         res = st.session_state.get(cache_key)
 
 if res is None:
@@ -858,19 +926,22 @@ if g.get("near_linear"):
     nearly_linear_hint = True
     st.caption("当前数据接近线性衰减，指数拟合的外推曲线也接近直线。")
 
-_c1, _c2 = st.columns([1, 5])
-with _c1:
-    _save_click = st.button("保存本次结果",
-                            help=f"按左侧记录阈值 FT={ft:.1f}% 保存 PNG 与 CSV 到 输出\\ 目录")
-if _save_click:
-    with st.spinner("正在保存……"):
-        _png1 = _png(_fig_prediction(prep, g, mc, ft_eff, uth_eff))
-        _png2 = _png(_fig_hist(rr_eff, ft_eff, uth_eff))
-        _saved_dir = str(_save_outputs(_png1, _png2, res, ft_eff, uth_eff, rr_eff))
-        st.session_state["last_out_dir"] = _saved_dir
-
-        res["saved"] = _saved_dir
-out_dir = Path(st.session_state.get("last_out_dir", OUTPUT_ROOT))
+if PUBLIC_MODE:
+    st.caption(f"导出使用记录阈值 FT = {ft_eff:.1f}%")
+    _download_outputs(prep, g, mc, ft_eff, uth_eff, rr_eff)
+else:
+    _c1, _c2 = st.columns([1, 5])
+    with _c1:
+        _save_click = st.button("保存本次结果",
+                                help=f"按左侧记录阈值 FT={ft:.1f}% 保存 PNG 与 CSV 到 输出\\ 目录")
+    if _save_click:
+        with st.spinner("正在保存……"):
+            _png1 = _png(_fig_prediction(prep, g, mc, ft_eff, uth_eff))
+            _png2 = _png(_fig_hist(rr_eff, ft_eff, uth_eff))
+            _saved_dir = str(_save_outputs(_png1, _png2, res, ft_eff, uth_eff, rr_eff))
+            st.session_state["last_out_dir"] = _saved_dir
+            res["saved"] = _saved_dir
+    out_dir = Path(st.session_state.get("last_out_dir", OUTPUT_ROOT))
 
 if _other_sel:
     with st.container(key="dsh_other_panel"):
@@ -901,7 +972,7 @@ if _other_sel:
 
         elif _other_sel == "🧭 工况":
             _cond = res.get("cond") or {}
-            _sens = dm.condition_sensitivity()
+            _sens = None if PUBLIC_MODE else dm.condition_sensitivity()
             st.markdown("**运行工况档案**")
             if _cond.get("has_I"):
                 st.markdown(
@@ -918,8 +989,9 @@ if _other_sel:
             else:
                 st.caption(f"{_cond.get('label', '无电流列')}：阈值直接按电压算。")
 
-            st.markdown("**电流 → 衰减速度 敏感度**")
-            if _sens.get("ok"):
+            if _sens is not None:
+                st.markdown("**电流 → 衰减速度 敏感度**")
+            if _sens and _sens.get("ok"):
                 st.markdown(
                     f"幂律拟合 **g₀ ∝ I^α**：α = **{_sens['alpha']:.2f}**"
                     f"（R² = {_sens['r2']:.2f}）  \n"
@@ -931,12 +1003,13 @@ if _other_sel:
                     st.info(f"当前电流 {_i_cur:.1f} A 不在已标定区间内：概率层会按对数距离"
                             f"自动降低远工况档的权重，RUL 区间偏宽属正常；"
                             f"把它当「外推」而不是实测结论。", icon="🧭")
-            else:
+            elif _sens is not None:
                 st.caption(f"有电流信息的历史档不足（同家族 ≥3 档才能拟合 α，"
                            f"当前 {_sens.get('n', 0)} 档），暂不给出。")
-            st.caption("概率层合并不是简单平均：每档历史按「电流对数距离」加权"
-                       "（exp(−(ln(I_d/I_cur)/0.7)²)），所以同一份数据在不同工况下"
-                       "会得到不同的 RUL 区间——这就是模型对环境特征值的敏感度。")
+            if _sens is not None:
+                st.caption("概率层合并不是简单平均：每档历史按「电流对数距离」加权"
+                           "（exp(−(ln(I_d/I_cur)/0.7)²)），所以同一份数据在不同工况下"
+                           "会得到不同的 RUL 区间——这就是模型对环境特征值的敏感度。")
 
         else:
             st.markdown("**全阈值表**（预设 3.5–6.0%）")
@@ -971,49 +1044,54 @@ with _slot_band.container():
     if _bk not in _band_cache:
         _band_cache.clear()
         _band_cache[_bk] = _png(_fig_band(prep, mc))
-    st.image(_band_cache[_bk], width="stretch")
+    if PUBLIC_MODE:
+        payload = base64.b64encode(_band_cache[_bk]).decode("ascii")
+        st.html(f'<img alt="电压预测不确定性扇形带" style="max-width:100%" src="data:image/png;base64,{payload}">')
+    else:
+        st.image(_band_cache[_bk], width="stretch")
     st.caption("浅色带 P5–P95（90% 概率）、深色带 P25–P75（50% 概率）；红虚线=确定性交付曲线")
 
-with _slot_trend.container():
-    _records = dm.list_datasets()
-    _cur_fp = res.get("fp")
-    _cur_g0 = res["g"]["g0_mVh"]
-    st.caption("每次预测都会记住一条「衰减趋势」；这里把当前数据与历史数据放在一起对比，"
-               "越接近说明历史记忆越可借鉴（概率层会等权合并它们的乘子分布）。")
-    _rows = []
-    for _r in _records[:8]:
-        if _r.get("fingerprint") == _cur_fp:
-            continue
-        _rows.append({
-            "历史数据": _r["name"][:18],
-            "记录长度(h)": round(_r["t_end"], 1),
-            "g₀(mV/h)": round(_r["g0_mVh"], 5),
-            "与当前g₀偏差(%)": round(100.0 * (_r["g0_mVh"] - _cur_g0) / max(abs(_cur_g0), 1e-9), 1),
-            "乘子均值": round(_r["d_mean"], 3),
-        })
-    if _rows:
-        st.dataframe(pd.DataFrame(_rows), width="stretch", height=180, hide_index=True)
-    else:
-        st.caption("（还没有其它历史数据；再投喂一份数据后即可对比）")
-    _tr_step = max(1, np.asarray(prep["t"]).size // 600)
-    _idx = np.asarray(prep["t"], float)[::_tr_step]
-    _trend_df = pd.DataFrame({"当前 u_trend (V)": np.asarray(prep["u_trend"])[::_tr_step]}, index=_idx)
-    for _r in _records[:3]:
-        if _r.get("fingerprint") == _cur_fp:
-            continue
-        _tr = dm.load_trend(_r["id"])
-        if _tr is None:
-            continue
-        _ser = pd.Series(_tr[1], index=_tr[0])
-        _trend_df[f'历史 {_r["created_at"][5:16].replace("T", " ")}'] = _ser.reindex(
-            _trend_df.index, method="nearest")
-    st.line_chart(_trend_df, height=200)
+if not PUBLIC_MODE:
+    with _slot_trend.container():
+        _records = dm.list_datasets()
+        _cur_fp = res.get("fp")
+        _cur_g0 = res["g"]["g0_mVh"]
+        st.caption("每次预测都会记住一条「衰减趋势」；这里把当前数据与历史数据放在一起对比，"
+                   "越接近说明历史记忆越可借鉴（概率层会等权合并它们的乘子分布）。")
+        _rows = []
+        for _r in _records[:8]:
+            if _r.get("fingerprint") == _cur_fp:
+                continue
+            _rows.append({
+                "历史数据": _r["name"][:18],
+                "记录长度(h)": round(_r["t_end"], 1),
+                "g₀(mV/h)": round(_r["g0_mVh"], 5),
+                "与当前g₀偏差(%)": round(100.0 * (_r["g0_mVh"] - _cur_g0) / max(abs(_cur_g0), 1e-9), 1),
+                "乘子均值": round(_r["d_mean"], 3),
+            })
+        if _rows:
+            st.dataframe(pd.DataFrame(_rows), width="stretch", height=180, hide_index=True)
+        else:
+            st.caption("（还没有其它历史数据；再投喂一份数据后即可对比）")
+        _tr_step = max(1, np.asarray(prep["t"]).size // 600)
+        _idx = np.asarray(prep["t"], float)[::_tr_step]
+        _trend_df = pd.DataFrame({"当前 u_trend (V)": np.asarray(prep["u_trend"])[::_tr_step]}, index=_idx)
+        for _r in _records[:3]:
+            if _r.get("fingerprint") == _cur_fp:
+                continue
+            _tr = dm.load_trend(_r["id"])
+            if _tr is None:
+                continue
+            _ser = pd.Series(_tr[1], index=_tr[0])
+            _trend_df[f'历史 {_r["created_at"][5:16].replace("T", " ")}'] = _ser.reindex(
+                _trend_df.index, method="nearest")
+        st.line_chart(_trend_df, height=200)
 
-with _slot_paths.container():
-    st.code(str(out_dir), language=None)
-    st.caption("每次预测都会新建一个时间戳文件夹，含：图1_预测曲线.png、图2_RUL分布.png、RUL分位数.csv")
-    st.code(str(dm.MEMORY_DIR), language=None)
-    st.caption(f"历史数据记忆库存档目录（当前 {len(dm.list_datasets())} 份，可在上一栏剔除）")
+    with _slot_paths.container():
+        st.code(str(out_dir), language=None)
+        st.caption("每次预测都会新建一个时间戳文件夹，含：图1_预测曲线.png、图2_RUL分布.png、RUL分位数.csv")
+        st.code(str(dm.MEMORY_DIR), language=None)
+        st.caption(f"历史数据记忆库存档目录（当前 {len(dm.list_datasets())} 份，可在上一栏剔除）")
 
 with _slot_ver.container():
     if VERSION_JSON.exists():

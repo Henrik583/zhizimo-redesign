@@ -2,7 +2,7 @@
 
 本仓库收录毛炯原有 Streamlit 终端的界面美化版，以及供交流使用的 FC1 浏览器演示。
 
-- [完整 Streamlit 版](dc-zhongduan/README.md)支持导入数据、运行预测、调整阈值和保存结果。Streamlit 部署入口为 `dc-zhongduan/app.py`。
+- [完整 Streamlit 版](dc-zhongduan/README.md)支持导入数据、运行预测、调整阈值和保存结果。Community Cloud 部署入口为 `dc-zhongduan/public_app.py`。
 - [FC1 在线演示](https://pemfc-fc1-redesign.lustrouskelp3.chatgpt.site/)使用预先计算的公开电堆数据，可调整阈值和导出 CSV。演示源码在 `demo/`。
 
 完整版本在 Python 3.11 环境下进入 `dc-zhongduan/`，安装 `requirements.txt`，再运行 `streamlit run app.py`。

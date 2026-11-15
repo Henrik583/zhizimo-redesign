@@ -35,13 +35,9 @@ streamlit run app.py
 
 ## 部署到 Streamlit Community Cloud
 
-1. 把本目录所在仓库推到 GitHub（本仓库已包含本目录）。
-2. 打开 <https://share.streamlit.io>，用 GitHub 账号登录并授权。
-3. New app：Repository 选本仓库、Branch 选 `main`、**Main file path 填 `dc-zhongduan/app.py`**。
-4. 点 Deploy，构建完成后得到公网地址（形如 `https://<应用名>.streamlit.app`）。
+1. 在 [Streamlit Community Cloud](https://share.streamlit.io/) 登录并连接 GitHub。
+2. 选择 **Create app**，填写本仓库、`main` 分支和入口 `dc-zhongduan/public_app.py`。
+3. 在 **Advanced settings** 选择 Python 3.11，点击 **Deploy**。
+4. 在应用的分享设置中确认公开访问。访客可上传 CSV、TSV、TXT、XLSX 或 XLS，运行预测并下载结果。
 
-注意事项：
-
-- 云端为 Linux 环境，`requirements.txt` 已改用 CPU 版 PyTorch（体积小、无需显卡）；
-- 中文图表字体由 `packages.txt` 中的 `fonts-noto-cjk` 提供；
-- 免费实例重启后 `输出/`、`数据记忆库/` 等运行产物不会保留（属正常现象），数据可通过上传重新分析。
+公开入口将上传数据和计算结果保留在当前会话。一次上传总量上限为 32 MB，分析曲线的有效时长上限为 10,000 h。云端依赖使用 CPU 版 PyTorch，仓库根目录的 `packages.txt` 安装中文图表字体。
